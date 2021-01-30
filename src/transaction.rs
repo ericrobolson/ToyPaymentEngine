@@ -1,7 +1,4 @@
-use crate::{
-    amount::Amount,
-    client::{Client, ClientId},
-};
+use crate::{amount::Amount, client::ClientId};
 
 pub type TransactionId = u32;
 
@@ -51,7 +48,7 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    // TODO: test
+    /// Returns the amount for the given transaction
     pub fn amount(&self) -> Option<Amount> {
         match self.transaction_type {
             TransactionType::Deposit(amount) => Some(amount),
@@ -61,50 +58,40 @@ impl Transaction {
     }
 }
 
-pub struct CsvTransaction {
-    pub transaction_type: String,
-    pub client: ClientId,
-    pub transaction_id: TransactionId,
-    pub amount: Option<Amount>,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-impl CsvTransaction {
-    pub fn into_transaction(&self) -> Option<Transaction> {
-        todo!();
-    }
-}
-pub struct Database {
-    clients: Vec<Client>,
-}
-
-impl Database {
-    pub fn new() -> Self {
-        let mut db = Self {
-            clients: Vec::with_capacity(ClientId::MAX as usize),
-        };
-
-        // testing
-
-        db
+    fn transaction(transaction_type: TransactionType) -> Transaction {
+        Transaction {
+            transaction_type,
+            client: 0,
+            id: 1,
+        }
     }
 
-    pub fn apply_transaction(&mut self, transaction: Transaction) {}
+    #[test]
+    fn transaction_amount_returns_amount() {
+        let amount = Amount::new(1);
+        assert_eq!(
+            Some(amount),
+            transaction(TransactionType::Deposit(amount)).amount()
+        );
 
-    pub fn output(&self) -> Vec<String> {
-        let mut output = vec![];
-        println!("client, available, held, total, locked");
+        let amount = Amount::new(2231);
+        assert_eq!(
+            Some(amount),
+            transaction(TransactionType::Withdrawal(amount)).amount()
+        );
 
-        self.clients.iter().for_each(|client| {
-            println!(
-                "{:?}, {:?}, {:?}, {:?}, {:?}",
-                client.id(),
-                client.available(),
-                client.held(),
-                client.total(),
-                client.locked()
-            );
-        });
+        let types_without_amounts = vec![
+            TransactionType::Dispute,
+            TransactionType::Resolve,
+            TransactionType::Chargeback,
+        ];
 
-        output
+        for t in types_without_amounts {
+            assert_eq!(None, transaction(t).amount());
+        }
     }
 }

@@ -2,6 +2,7 @@ use std::env;
 
 mod amount;
 mod client;
+mod database;
 mod parse_csv;
 mod parse_env_args;
 mod transaction;
@@ -25,7 +26,7 @@ fn main() -> Result<(), ApplicationError> {
     // TODO: process
     // TODO: output
 
-    let mut database = transaction::Database::new();
+    let mut database = database::Database::new();
 
     for line in database.output() {
         println!("{:?}", line);
