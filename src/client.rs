@@ -1,7 +1,15 @@
 use crate::amount::Amount;
-use crate::transaction::{Transaction, TransactionType};
+use crate::transaction::{Transaction, TransactionId, TransactionType};
 
 pub type ClientId = u16;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TransactionState {
+    Ok,
+    Disputed,
+    Resolved,
+    Chargebacked,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Client {
@@ -9,8 +17,7 @@ pub struct Client {
     available: Amount,
     held: Amount,
     locked: bool,
-
-    transactions: Vec<Transaction>,
+    transactions: Vec<(TransactionState, Transaction)>,
 }
 impl Client {
     pub fn new(id: ClientId) -> Self {
@@ -39,6 +46,10 @@ impl Client {
         self.available() + self.held()
     }
 
+    fn transaction_index(&self, transaction_id: TransactionId) -> Option<usize> {
+        None
+    }
+
     pub fn execute_transaction(
         &mut self,
         transaction: Transaction,
@@ -49,6 +60,11 @@ impl Client {
                 actual: transaction.client,
                 expected: self.id,
             });
+        }
+
+        // Check if frozen
+        if self.locked {
+            return Err(TransactionError::ClientLocked);
         }
 
         // Attempt to apply the transaction
@@ -72,18 +88,48 @@ impl Client {
                 self.available = diff;
             }
             crate::transaction::TransactionType::Dispute => {
-                todo!()
+                match self.transaction_index(transaction.id) {
+                    Some(transaction_index) => {
+                        todo!("IMPLEMENTE THIS!");
+                        // TODO: ensure that only things in a valid state are processed
+                    }
+                    None => {
+                        return Err(TransactionError::NotFound {
+                            transaction_id: transaction.id,
+                        });
+                    }
+                }
             }
             crate::transaction::TransactionType::Resolve => {
-                todo!()
+                match self.transaction_index(transaction.id) {
+                    Some(transaction_index) => {
+                        todo!("IMPLEMENTE THIS!");
+                        // TODO: ensure that only things in a valid state are processed
+                    }
+                    None => {
+                        return Err(TransactionError::NotFound {
+                            transaction_id: transaction.id,
+                        });
+                    }
+                }
             }
             crate::transaction::TransactionType::Chargeback => {
-                todo!()
+                match self.transaction_index(transaction.id) {
+                    Some(transaction_index) => {
+                        todo!("IMPLEMENTE THIS!");
+                        // TODO: ensure that only things in a valid state are processed
+                    }
+                    None => {
+                        return Err(TransactionError::NotFound {
+                            transaction_id: transaction.id,
+                        });
+                    }
+                }
             }
         }
 
         // It was a valid transaction, so log it
-        self.transactions.push(transaction);
+        self.transactions.push((TransactionState::Ok, transaction));
 
         Ok(())
     }
@@ -101,37 +147,172 @@ pub enum TransactionError {
     InvalidWithdrawal {
         resulting_amount: Amount,
     },
+    NotFound {
+        transaction_id: TransactionId,
+    },
+    AlreadyProcessed {
+        current_state: TransactionState,
+    },
+    ClientLocked,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn create_transaction(client: &Client, transaction_type: TransactionType) -> Transaction {
+    fn create_transaction(
+        client: &Client,
+        transaction_id: TransactionId,
+        transaction_type: TransactionType,
+    ) -> Transaction {
         Transaction {
             client: client.id,
-            id: 23,
+            id: transaction_id,
             transaction_type,
         }
     }
 
     fn create_deposit(client: &Client, amount: Amount) -> Transaction {
-        create_transaction(client, TransactionType::Deposit(amount))
+        create_transaction(client, 23, TransactionType::Deposit(amount))
     }
 
     fn create_withdrawal(client: &Client, amount: Amount) -> Transaction {
-        create_transaction(client, TransactionType::Withdrawal(amount))
+        create_transaction(client, 24, TransactionType::Withdrawal(amount))
+    }
+
+    fn create_dispute(client: &Client, id: TransactionId) -> Transaction {
+        create_transaction(client, id, TransactionType::Dispute)
+    }
+
+    fn create_resolve(client: &Client, id: TransactionId) -> Transaction {
+        create_transaction(client, id, TransactionType::Resolve)
+    }
+
+    fn create_chargeback(client: &Client, id: TransactionId) -> Transaction {
+        create_transaction(client, id, TransactionType::Chargeback)
+    }
+
+    #[test]
+    fn client_execute_transaction_dispute_transaction_doesnt_exist_does_nothing() {
+        let mut client = Client::new(4482);
+
+        let deposit = create_deposit(&client, Amount::new(40000));
+        client.execute_transaction(deposit).unwrap();
+        let withdrawal = create_withdrawal(&client, Amount::new(40000));
+        client.execute_transaction(withdrawal).unwrap();
+
+        let dispute = create_dispute(&client, 29292);
+        let result = client.execute_transaction(dispute);
+        assert_eq!(true, result.is_err());
+        assert_eq!(
+            TransactionError::NotFound {
+                transaction_id: dispute.id
+            },
+            result.unwrap_err()
+        );
+
+        assert_eq!(2, client.transactions.len());
+    }
+
+    #[test]
+    fn client_execute_transaction_dispute_is_locked_returns_err() {
+        let mut client = Client::new(4482);
+
+        client.locked = true;
+
+        let transaction = create_dispute(&client, 29292);
+        let result = client.execute_transaction(transaction);
+
+        assert_eq!(true, result.is_err());
+        assert_eq!(TransactionError::ClientLocked, result.unwrap_err());
+
+        assert_eq!(0, client.transactions.len());
+    }
+
+    // RESOLVES
+
+    #[test]
+    fn client_execute_transaction_resolve_transaction_doesnt_exist_does_nothing() {
+        let mut client = Client::new(4482);
+
+        let deposit = create_deposit(&client, Amount::new(40000));
+        client.execute_transaction(deposit).unwrap();
+        let withdrawal = create_withdrawal(&client, Amount::new(40000));
+        client.execute_transaction(withdrawal).unwrap();
+
+        let resolve = create_resolve(&client, 29292);
+        let result = client.execute_transaction(resolve);
+        assert_eq!(true, result.is_err());
+        assert_eq!(
+            TransactionError::NotFound {
+                transaction_id: resolve.id
+            },
+            result.unwrap_err()
+        );
+
+        assert_eq!(2, client.transactions.len());
+    }
+
+    #[test]
+    fn client_execute_transaction_resolve_is_locked_returns_err() {
+        let mut client = Client::new(4482);
+
+        client.locked = true;
+
+        let transaction = create_resolve(&client, 29292);
+        let result = client.execute_transaction(transaction);
+
+        assert_eq!(true, result.is_err());
+        assert_eq!(TransactionError::ClientLocked, result.unwrap_err());
+
+        assert_eq!(0, client.transactions.len());
+    }
+
+    //CHARGEBACKS
+    #[test]
+    fn client_execute_transaction_chargeback_transaction_doesnt_exist_does_nothing() {
+        let mut client = Client::new(4482);
+
+        let deposit = create_deposit(&client, Amount::new(40000));
+        client.execute_transaction(deposit).unwrap();
+        let withdrawal = create_withdrawal(&client, Amount::new(40000));
+        client.execute_transaction(withdrawal).unwrap();
+
+        let chargeback = create_chargeback(&client, 29292);
+        let result = client.execute_transaction(chargeback);
+        assert_eq!(true, result.is_err());
+        assert_eq!(
+            TransactionError::NotFound {
+                transaction_id: chargeback.id
+            },
+            result.unwrap_err()
+        );
+
+        assert_eq!(2, client.transactions.len());
+    }
+
+    #[test]
+    fn client_execute_transaction_chargeback_is_locked_returns_err() {
+        let mut client = Client::new(4482);
+
+        client.locked = true;
+
+        let transaction = create_chargeback(&client, 29292);
+        let result = client.execute_transaction(transaction);
+
+        assert_eq!(true, result.is_err());
+        assert_eq!(TransactionError::ClientLocked, result.unwrap_err());
+
+        assert_eq!(0, client.transactions.len());
     }
 
     #[test]
     fn client_execute_transaction_withdrawal_negative_returns_err() {
         let mut client = Client::new(4482);
 
-        // Add a deposit
         let transaction = create_deposit(&client, Amount::new(40000));
         client.execute_transaction(transaction).unwrap();
 
-        // Now execute withdrawal
         let amount = Amount::new(-1);
         let transaction = create_withdrawal(&client, amount);
         let result = client.execute_transaction(transaction);
@@ -150,11 +331,9 @@ mod tests {
     fn client_execute_transaction_withdrawal_would_be_negative_returns_err() {
         let mut client = Client::new(4482);
 
-        // Add a deposit
         let transaction = create_deposit(&client, Amount::new(40000));
         client.execute_transaction(transaction).unwrap();
 
-        // Now execute withdrawal
         let amount = Amount::new(40001);
         let transaction = create_withdrawal(&client, amount);
         let result = client.execute_transaction(transaction);
@@ -173,12 +352,10 @@ mod tests {
     fn client_execute_transaction_withdrawal_zero_returns_ok() {
         let mut client = Client::new(4482);
 
-        // Add a deposit
         let original_amount = Amount::new(40000);
         let transaction = create_deposit(&client, original_amount);
         client.execute_transaction(transaction).unwrap();
 
-        // Now execute withdrawal
         let amount = Amount::new(0);
         let transaction = create_withdrawal(&client, amount);
         let result = client.execute_transaction(transaction);
@@ -187,19 +364,17 @@ mod tests {
         assert_eq!(original_amount - amount, client.available);
 
         assert_eq!(2, client.transactions.len());
-        assert_eq!(transaction, client.transactions[1]);
+        assert_eq!((TransactionState::Ok, transaction), client.transactions[1]);
     }
 
     #[test]
     fn client_execute_transaction_withdrawal_valid_returns_ok() {
         let mut client = Client::new(4482);
 
-        // Add a deposit
         let original_amount = Amount::new(40000);
         let transaction = create_deposit(&client, original_amount);
         client.execute_transaction(transaction).unwrap();
 
-        // Now execute withdrawal
         let amount = Amount::new(1);
         let transaction = create_withdrawal(&client, amount);
         let result = client.execute_transaction(transaction);
@@ -208,7 +383,23 @@ mod tests {
         assert_eq!(original_amount - amount, client.available);
 
         assert_eq!(2, client.transactions.len());
-        assert_eq!(transaction, client.transactions[1]);
+        assert_eq!((TransactionState::Ok, transaction), client.transactions[1]);
+    }
+
+    #[test]
+    fn client_execute_transaction_withdrawal_is_locked_returns_err() {
+        let mut client = Client::new(4482);
+
+        client.locked = true;
+
+        let amount = Amount::new(1);
+        let transaction = create_withdrawal(&client, amount);
+        let result = client.execute_transaction(transaction);
+
+        assert_eq!(true, result.is_err());
+        assert_eq!(TransactionError::ClientLocked, result.unwrap_err());
+
+        assert_eq!(0, client.transactions.len());
     }
 
     #[test]
@@ -242,7 +433,7 @@ mod tests {
         assert_eq!(true, result.is_ok());
 
         assert_eq!(Amount::zero(), client.available);
-        assert_eq!(transaction, client.transactions[0]);
+        assert_eq!((TransactionState::Ok, transaction), client.transactions[0]);
     }
 
     #[test]
@@ -256,7 +447,23 @@ mod tests {
         assert_eq!(true, result.is_ok());
 
         assert_eq!(deposit_amount, client.available);
-        assert_eq!(transaction, client.transactions[0]);
+        assert_eq!((TransactionState::Ok, transaction), client.transactions[0]);
+    }
+
+    #[test]
+    fn client_execute_transaction_deposit_is_locked_returns_err() {
+        let mut client = Client::new(4482);
+
+        client.locked = true;
+
+        let amount = Amount::new(1);
+        let transaction = create_deposit(&client, amount);
+        let result = client.execute_transaction(transaction);
+
+        assert_eq!(true, result.is_err());
+        assert_eq!(TransactionError::ClientLocked, result.unwrap_err());
+
+        assert_eq!(0, client.transactions.len());
     }
 
     #[test]
