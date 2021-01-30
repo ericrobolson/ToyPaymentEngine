@@ -1,5 +1,6 @@
 use std::env;
 
+mod parse_csv;
 mod parse_env_args;
 mod transaction;
 use parse_env_args::{env_args_parse_file, EnvArgsParseError};
@@ -19,13 +20,14 @@ fn main() -> Result<(), ApplicationError> {
         }
     };
 
-    load_csv(file_path);
     // TODO: process
     // TODO: output
 
-    Ok(())
-}
+    let mut database = transaction::Database::new();
 
-fn load_csv(file_path: String) {
-    unimplemented!();
+    for line in database.output() {
+        println!("{:?}", line);
+    }
+
+    Ok(())
 }
