@@ -1,37 +1,8 @@
+use crate::amount::Amount;
+
 pub type ClientId = u16;
 
 pub type TransactionId = u32;
-
-pub enum AmountError {
-    SubtractOverflow,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Amount {
-    whole_number: u32,
-    decimal: [u8; 4],
-}
-
-impl Amount {
-    // TODO: implement displays
-
-    pub fn new() -> Self {
-        Self {
-            whole_number: 0,
-            decimal: [0; 4],
-        }
-    }
-
-    pub fn add(&self, other: Self) -> Self {
-        *self
-        // todo!();
-    }
-
-    pub fn subtract(&self, other: Self) -> Result<Self, AmountError> {
-        Ok(*self)
-        //todo!();
-    }
-}
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum TransactionType {
@@ -84,7 +55,7 @@ impl Client {
         self.locked
     }
     pub fn total(&self) -> Amount {
-        self.available().add(self.held())
+        self.available() + self.held()
     }
 }
 
@@ -101,8 +72,8 @@ impl Database {
         // testing
         db.clients.push(Client {
             id: 01,
-            available: Amount::new(),
-            held: Amount::new(),
+            available: Amount::default(),
+            held: Amount::default(),
             locked: false,
             transactions: vec![],
         });
