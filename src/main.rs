@@ -1,6 +1,7 @@
 use std::env;
 
 mod amount;
+mod client;
 mod parse_csv;
 mod parse_env_args;
 mod transaction;

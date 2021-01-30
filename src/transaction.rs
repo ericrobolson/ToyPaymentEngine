@@ -1,13 +1,14 @@
-use crate::amount::Amount;
-
-pub type ClientId = u16;
+use crate::{
+    amount::Amount,
+    client::{Client, ClientId},
+};
 
 pub type TransactionId = u32;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum TransactionType {
     Deposit(Amount),
-    Withdrawl(Amount),
+    Withdrawal(Amount),
     Dispute,
     Resolve,
     Chargeback,
@@ -32,33 +33,6 @@ impl CsvTransaction {
         todo!();
     }
 }
-
-pub struct Client {
-    id: ClientId,
-    available: Amount,
-    held: Amount,
-    locked: bool,
-
-    transactions: Vec<Transaction>,
-}
-impl Client {
-    pub fn id(&self) -> ClientId {
-        self.id
-    }
-    pub fn available(&self) -> Amount {
-        self.available
-    }
-    pub fn held(&self) -> Amount {
-        self.held
-    }
-    pub fn locked(&self) -> bool {
-        self.locked
-    }
-    pub fn total(&self) -> Amount {
-        self.available() + self.held()
-    }
-}
-
 pub struct Database {
     clients: Vec<Client>,
 }
@@ -70,13 +44,6 @@ impl Database {
         };
 
         // testing
-        db.clients.push(Client {
-            id: 01,
-            available: Amount::default(),
-            held: Amount::default(),
-            locked: false,
-            transactions: vec![],
-        });
 
         db
     }

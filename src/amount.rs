@@ -1,5 +1,7 @@
 use rust_decimal::Decimal;
 
+// Using rust_decimal as it's a finance based decimal crate that allows specification of precision.
+
 const DECIMAL_PLACES: u32 = 4;
 
 #[derive(Copy, Clone, PartialEq)]
