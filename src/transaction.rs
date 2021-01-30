@@ -14,11 +14,50 @@ pub enum TransactionType {
     Chargeback,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TransactionState {
+    Ok,
+    Disputed,
+    Chargebacked,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TransactionError {
+    InvalidClient {
+        expected: ClientId,
+        actual: ClientId,
+    },
+    InvalidDeposit {
+        amount: Amount,
+    },
+    InvalidWithdrawal {
+        resulting_amount: Amount,
+    },
+    NotFound {
+        transaction_id: TransactionId,
+    },
+    AlreadyProcessed {
+        current_state: TransactionState,
+    },
+    ClientLocked,
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Transaction {
     pub transaction_type: TransactionType,
     pub client: ClientId,
     pub id: TransactionId,
+}
+
+impl Transaction {
+    // TODO: test
+    pub fn amount(&self) -> Option<Amount> {
+        match self.transaction_type {
+            TransactionType::Deposit(amount) => Some(amount),
+            TransactionType::Withdrawal(amount) => Some(amount),
+            _ => None,
+        }
+    }
 }
 
 pub struct CsvTransaction {
