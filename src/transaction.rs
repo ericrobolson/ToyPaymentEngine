@@ -36,8 +36,9 @@ pub enum TransactionError {
     NotFound {
         transaction_id: TransactionId,
     },
-    AlreadyProcessed {
+    Unprocessable {
         current_state: TransactionState,
+        required_state: TransactionState,
     },
     ClientLocked,
 }

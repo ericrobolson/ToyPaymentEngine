@@ -100,6 +100,7 @@ impl Client {
             TransactionType::Dispute => match self.transaction_index(transaction.id) {
                 Some(transaction_index) => {
                     let (state, transaction) = self.transactions[transaction_index];
+
                     match state {
                         TransactionState::Ok => {
                             let disputed_amount = transaction.amount().unwrap_or_default();
@@ -110,8 +111,9 @@ impl Client {
                                 (TransactionState::Disputed, transaction);
                         }
                         _ => {
-                            return Err(TransactionError::AlreadyProcessed {
+                            return Err(TransactionError::Unprocessable {
                                 current_state: state,
+                                required_state: TransactionState::Ok,
                             });
                         }
                     }
@@ -122,19 +124,32 @@ impl Client {
                     });
                 }
             },
-            TransactionType::Resolve => {
-                match self.transaction_index(transaction.id) {
-                    Some(transaction_index) => {
-                        todo!("IMPLEMENTE THIS!");
-                        // TODO: ensure that only things in a valid state are processed
-                    }
-                    None => {
-                        return Err(TransactionError::NotFound {
-                            transaction_id: transaction.id,
-                        });
+            TransactionType::Resolve => match self.transaction_index(transaction.id) {
+                Some(transaction_index) => {
+                    let (state, transaction) = self.transactions[transaction_index];
+                    match state {
+                        TransactionState::Disputed => {
+                            let disputed_amount = transaction.amount().unwrap_or_default();
+                            self.available = self.available + disputed_amount;
+                            self.held = self.held - disputed_amount;
+
+                            self.transactions[transaction_index] =
+                                (TransactionState::Ok, transaction);
+                        }
+                        _ => {
+                            return Err(TransactionError::Unprocessable {
+                                current_state: state,
+                                required_state: TransactionState::Disputed,
+                            });
+                        }
                     }
                 }
-            }
+                None => {
+                    return Err(TransactionError::NotFound {
+                        transaction_id: transaction.id,
+                    });
+                }
+            },
             TransactionType::Chargeback => {
                 match self.transaction_index(transaction.id) {
                     Some(transaction_index) => {
@@ -237,10 +252,8 @@ mod tests {
         assert_eq!(None, client.transaction_index(chargeback.id));
     }
 
-    // DISPUTES
-
     #[test]
-    fn client_execute_dispute_deposit_holds_funds_changes_state() {
+    fn client_execute_transaction_dispute_deposit_holds_funds_changes_state() {
         let mut client = Client::new(4453);
         let initial = Amount::new(9921);
         client.available = initial;
@@ -248,6 +261,7 @@ mod tests {
         let amount = Amount::new(444438097);
         let deposit = create_deposit(&client, amount);
         client.execute_transaction(deposit).unwrap();
+        let total = client.total();
 
         let dispute = create_dispute(&client, deposit.id);
         let result = client.execute_transaction(dispute);
@@ -256,36 +270,10 @@ mod tests {
         assert_eq!(TransactionState::Disputed, client.transactions[0].0);
         assert_eq!(amount, client.held);
         assert_eq!(initial, client.available);
+        assert_eq!(total, client.total());
     }
-
     #[test]
-    fn client_execute_dispute_already_disputed_does_nothing() {
-        let mut client = Client::new(4453);
-        let initial = Amount::new(9921);
-        client.available = initial;
-
-        let amount = Amount::new(444438097);
-        let deposit = create_deposit(&client, amount);
-        client.execute_transaction(deposit).unwrap();
-
-        let dispute = create_dispute(&client, deposit.id);
-        let result = client.execute_transaction(dispute);
-        let snapshot = client.clone();
-
-        let result = client.execute_transaction(dispute);
-
-        assert_eq!(true, result.is_err());
-        assert_eq!(
-            TransactionError::AlreadyProcessed {
-                current_state: TransactionState::Disputed
-            },
-            result.unwrap_err()
-        );
-        assert_eq!(snapshot, client);
-    }
-
-    #[test]
-    fn client_execute_dispute_withdrawal_holds_funds_changes_state() {
+    fn client_execute_transaction_dispute_withdrawal_holds_funds_changes_state() {
         let mut client = Client::new(4453);
         let initial = Amount::new(9921);
         client.available = initial;
@@ -293,6 +281,7 @@ mod tests {
         let amount = Amount::new(9921);
         let withdrawal = create_withdrawal(&client, amount);
         client.execute_transaction(withdrawal).unwrap();
+        let total = client.total();
 
         let dispute = create_dispute(&client, withdrawal.id);
         let result = client.execute_transaction(dispute);
@@ -301,6 +290,114 @@ mod tests {
         assert_eq!(TransactionState::Disputed, client.transactions[0].0);
         assert_eq!(amount, client.held);
         assert_eq!(initial - amount - amount, client.available);
+        assert_eq!(total, client.total());
+    }
+
+    #[test]
+    fn client_execute_transaction_dispute_not_ok_does_nothing() {
+        let states = vec![TransactionState::Disputed, TransactionState::Chargebacked];
+        for state in states {
+            let mut client = Client::new(4453);
+            let initial = Amount::new(9921);
+            client.available = initial;
+
+            let amount = Amount::new(444438097);
+            let deposit = create_deposit(&client, amount);
+            client.execute_transaction(deposit).unwrap();
+            client.transactions[0].0 = state;
+
+            let dispute = create_dispute(&client, deposit.id);
+            let result = client.execute_transaction(dispute);
+            let snapshot = client.clone();
+
+            let result = client.execute_transaction(dispute);
+
+            assert_eq!(true, result.is_err());
+            assert_eq!(
+                TransactionError::Unprocessable {
+                    current_state: state,
+                    required_state: TransactionState::Ok
+                },
+                result.unwrap_err()
+            );
+            assert_eq!(snapshot, client);
+        }
+    }
+
+    #[test]
+    fn client_execute_transaction_resolve_deposit_releases_funds_changes_state() {
+        let mut client = Client::new(4453);
+        let initial = Amount::new(9921);
+        client.available = initial;
+
+        let amount = Amount::new(444438097);
+        let deposit = create_deposit(&client, amount);
+        client.execute_transaction(deposit).unwrap();
+        let total = client.total();
+
+        let dispute = create_dispute(&client, deposit.id);
+        let result = client.execute_transaction(dispute);
+
+        let resolve = create_resolve(&client, deposit.id);
+        let result = client.execute_transaction(resolve);
+
+        assert_eq!(true, result.is_ok());
+        assert_eq!(TransactionState::Ok, client.transactions[0].0);
+        assert_eq!(Amount::zero(), client.held);
+        assert_eq!(total, client.available);
+        assert_eq!(total, client.total());
+    }
+    #[test]
+    fn client_execute_transaction_resolve_withdrawal_holds_funds_changes_state() {
+        let mut client = Client::new(4453);
+        let initial = Amount::new(9921);
+        client.available = initial;
+
+        let amount = Amount::new(33);
+        let withdrawal = create_withdrawal(&client, amount);
+        client.execute_transaction(withdrawal).unwrap();
+        let total = client.total();
+
+        let dispute = create_dispute(&client, withdrawal.id);
+        let result = client.execute_transaction(dispute);
+
+        let resolve = create_resolve(&client, withdrawal.id);
+        let result = client.execute_transaction(resolve);
+
+        assert_eq!(true, result.is_ok());
+        assert_eq!(TransactionState::Ok, client.transactions[0].0);
+        assert_eq!(Amount::zero(), client.held);
+        assert_eq!(total, client.available);
+        assert_eq!(total, client.total());
+    }
+
+    #[test]
+    fn client_execute_transaction_resolve_not_disputed_does_nothing() {
+        let states = vec![TransactionState::Ok, TransactionState::Chargebacked];
+        for state in states {
+            let mut client = Client::new(4453);
+            let initial = Amount::new(9921);
+            client.available = initial;
+
+            let amount = Amount::new(444438097);
+            let deposit = create_deposit(&client, amount);
+            client.execute_transaction(deposit).unwrap();
+            client.transactions[0].0 = state;
+
+            let resolve = create_resolve(&client, deposit.id);
+            let result = client.execute_transaction(resolve);
+            let snapshot = client.clone();
+
+            assert_eq!(true, result.is_err());
+            assert_eq!(
+                TransactionError::Unprocessable {
+                    current_state: state,
+                    required_state: TransactionState::Disputed
+                },
+                result.unwrap_err()
+            );
+            assert_eq!(snapshot, client);
+        }
     }
 
     #[test]
@@ -339,8 +436,6 @@ mod tests {
 
         assert_eq!(0, client.transactions.len());
     }
-
-    // RESOLVES
 
     #[test]
     fn client_execute_transaction_resolve_transaction_doesnt_exist_does_nothing() {
