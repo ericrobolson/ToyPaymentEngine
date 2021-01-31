@@ -76,7 +76,7 @@ mod tests {
 
     #[test]
     fn database_apply_transaction_sets_account_to_valid_returns_result() {
-        // With more time, the ideal would have been to make a mock implementation of the ClientAccount trait and use it for testing.
+        // TODO: With more time, the ideal would have been to make a mock implementation of the ClientAccount trait and use it for testing.
 
         let mut db = Database::<Client>::new();
         let client_id = 45;

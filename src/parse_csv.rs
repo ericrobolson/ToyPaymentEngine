@@ -55,7 +55,7 @@ impl CsvTransaction {
 
         let transaction_type = match self.transaction_type.trim() {
             "deposit" => {
-                // TODO: With more time, implement an actual parse error here. For now fail gracefully by ignoring.
+                // TODO: With more time, implement an actual parse error here? For now fail gracefully by ignoring.
                 if amount_empty {
                     return Ok(None);
                 }
@@ -64,7 +64,7 @@ impl CsvTransaction {
                 TransactionType::Deposit(amount)
             }
             "withdrawal" => {
-                // TODO: With more time, implement an actual parse error here. For now fail gracefully by ignoring.
+                // TODO: With more time, implement an actual parse error here? For now fail gracefully by ignoring.
                 if amount_empty {
                     return Ok(None);
                 }
@@ -76,7 +76,7 @@ impl CsvTransaction {
             "resolve" => TransactionType::Resolve,
             "chargeback" => TransactionType::Chargeback,
             _ => {
-                // TODO: With more time, implement an actual parse error here.
+                // TODO: With more time, implement an actual parse error here?
                 return Ok(None);
             }
         };

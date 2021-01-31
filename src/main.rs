@@ -41,7 +41,7 @@ fn main() -> Result<(), ApplicationError> {
                 // Succesfully processed, so no further actions.
             }
             Err(e) => {
-                // TODO: error handling for invalid transactions.
+                // TODO: error handling for invalid transactions?
             }
         }
     }
@@ -51,7 +51,7 @@ fn main() -> Result<(), ApplicationError> {
     Ok(())
 }
 
-// This is a simple way to test large files. N
+// This is a simple way to test large files.
 #[cfg(feature = "test-large-files")]
 fn main() {
     test_large_files::execute();

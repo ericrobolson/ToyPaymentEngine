@@ -21,7 +21,7 @@ impl Amount {
 
     /// Creates a decimal from the given string
     pub fn from_str(s: &str) -> Result<Self, rust_decimal::Error> {
-        // TODO: return an error if the decimal places are truncated.
+        // TODO: return an error if the decimal places are truncated?
         let mut value = Decimal::from_str(s)?;
         value.rescale(DECIMAL_PLACES);
 
