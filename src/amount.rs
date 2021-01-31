@@ -19,8 +19,11 @@ impl Amount {
         }
     }
 
+    /// Creates a decimal from the given string
     pub fn from_str(s: &str) -> Result<Self, rust_decimal::Error> {
-        let value = Decimal::from_str(s)?;
+        // TODO: return an error if the decimal places are truncated.
+        let mut value = Decimal::from_str(s)?;
+        value.rescale(DECIMAL_PLACES);
 
         Ok(Self { value })
     }
@@ -160,12 +163,24 @@ mod tests {
     }
 
     #[test]
+    fn amount_from_str_returns_error_when_passed_garbage() {
+        let result = Amount::from_str("garbage");
+        assert_eq!(true, result.is_err());
+    }
+
+    #[test]
     fn amount_from_str_deserializes_properly() {
-        todo!()
+        let result = Amount::from_str("1200444.4212");
+        assert_eq!(true, result.is_ok());
+        let actual = result.unwrap();
+        assert_eq!(Amount::new(12004444212), actual);
     }
 
     #[test]
     fn amount_from_str_exceeds_decimal_places() {
-        todo!()
+        let result = Amount::from_str("1200444.423343412");
+        assert_eq!(true, result.is_ok());
+        let actual = result.unwrap();
+        assert_eq!(Amount::new(12004444233), actual);
     }
 }

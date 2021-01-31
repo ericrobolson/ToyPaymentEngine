@@ -19,3 +19,10 @@ This is not heavy duty, as it resides in memory and is not asynchronous.
 CSV parsing is handled in `parse_csv.rs`.
 
 A variety of test CSVs are located in the `/test` folder.
+
+
+## Next Steps
+* Look at `std` traits and see what can be applied here. Primarily the `std::convert::TryInto` ones.
+* Better threading 
+* Better error handling
+* Handling truncation on `Amount`s when converting from a string
