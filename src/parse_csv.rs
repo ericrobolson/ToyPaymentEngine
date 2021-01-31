@@ -18,6 +18,7 @@ pub fn execute(file_path: String) -> Result<Vec<Transaction>, Box<dyn Error>> {
 
     let mut rdr = csv::ReaderBuilder::new()
         .has_headers(true)
+        .flexible(true)
         .terminator(csv::Terminator::CRLF)
         .from_reader(contents.as_bytes());
 
@@ -43,18 +44,32 @@ pub struct CsvTransaction {
     pub transaction_type: String,
     pub client: String,
     pub tx: TransactionId,
-    pub amount: String,
+    pub amount: Option<String>,
 }
 
 impl CsvTransaction {
     pub fn into_transaction(&self) -> Result<Option<Transaction>, Box<dyn Error>> {
+        let amount = self.amount.clone().unwrap_or("".to_string());
+
+        let amount_empty = amount.trim() == "";
+
         let transaction_type = match self.transaction_type.trim() {
             "deposit" => {
-                let amount = Amount::from_str(&self.amount)?;
+                // TODO: With more time, implement an actual parse error here. For now fail gracefully by ignoring.
+                if amount_empty {
+                    return Ok(None);
+                }
+
+                let amount = Amount::from_str(&amount)?;
                 TransactionType::Deposit(amount)
             }
             "withdrawal" => {
-                let amount = Amount::from_str(&self.amount)?;
+                // TODO: With more time, implement an actual parse error here. For now fail gracefully by ignoring.
+                if amount_empty {
+                    return Ok(None);
+                }
+
+                let amount = Amount::from_str(&amount)?;
                 TransactionType::Withdrawal(amount)
             }
             "dispute" => TransactionType::Dispute,

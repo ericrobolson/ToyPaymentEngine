@@ -103,7 +103,15 @@ impl ClientAccount for Client {
                     match state {
                         TransactionState::Ok => {
                             let disputed_amount = transaction.amount().unwrap_or_default();
-                            self.available = self.available - disputed_amount;
+
+                            match transaction.transaction_type {
+                                TransactionType::Deposit(amount) => {
+                                    self.available = self.available - disputed_amount;
+                                }
+                                TransactionType::Withdrawal(amount) => {}
+                                _ => {}
+                            }
+
                             self.held = self.held + disputed_amount;
 
                             self.transactions[transaction_index] =
@@ -254,6 +262,73 @@ mod tests {
     }
 
     #[test]
+    fn client_transaction_complex_chargeback_works_ok() {
+        let mut client = Client::new(4482);
+
+        let deposit1_amount = Amount::new(10000);
+        let mut deposit1 = create_deposit(&client, deposit1_amount);
+        deposit1.id = 0;
+        let _result = client.execute_transaction(deposit1);
+
+        let deposit2_amount = Amount::new(20000);
+        let mut deposit2 = create_deposit(&client, deposit2_amount);
+        deposit2.id = 5;
+        let _result = client.execute_transaction(deposit2);
+
+        let dispute = create_dispute(&client, deposit2.id);
+        let _result = client.execute_transaction(dispute);
+
+        let chargeback = create_chargeback(&client, deposit2.id);
+        let _result = client.execute_transaction(chargeback);
+
+        assert_eq!(deposit1_amount, client.available);
+        assert_eq!(deposit1_amount, client.total());
+    }
+
+    #[test]
+    fn client_transaction_complex_chargeback_with_withdrawal_works_ok() {
+        let mut client = Client::new(4482);
+
+        let deposit1_amount = Amount::new(10000);
+        let mut deposit1 = create_deposit(&client, deposit1_amount);
+        deposit1.id = 0;
+        let _result = client.execute_transaction(deposit1);
+
+        let deposit2_amount = Amount::new(20000);
+        let mut deposit2 = create_deposit(&client, deposit2_amount);
+        deposit2.id = 5;
+        let _result = client.execute_transaction(deposit2);
+
+        let withdrawal_amount = Amount::new(15000);
+        let mut withdrawal = create_withdrawal(&client, withdrawal_amount);
+        withdrawal.id = 7;
+        let _result = client.execute_transaction(withdrawal);
+
+        let dispute = create_dispute(&client, withdrawal.id);
+        let _result = client.execute_transaction(dispute);
+
+        assert_eq!(
+            deposit1_amount + deposit2_amount - withdrawal_amount,
+            client.available
+        );
+        assert_eq!(withdrawal_amount, client.held);
+        assert_eq!(deposit1_amount + deposit2_amount, client.total());
+
+        let chargeback = create_chargeback(&client, withdrawal.id);
+        let _result = client.execute_transaction(chargeback);
+
+        assert_eq!(
+            deposit1_amount + deposit2_amount - withdrawal_amount,
+            client.available
+        );
+        assert_eq!(Amount::zero(), client.held);
+        assert_eq!(
+            deposit1_amount + deposit2_amount - withdrawal_amount,
+            client.total()
+        );
+    }
+
+    #[test]
     fn client_transaction_index_not_found_returns_none() {
         let transaction_id = 100000;
         let client = Client::new(4482);
@@ -298,60 +373,6 @@ mod tests {
     }
 
     #[test]
-    fn client_execute_transaction_multiple_disputes_deposit_holds_funds_changes_state() {
-        let mut client = Client::new(4453);
-
-        let mut amounts = vec![];
-        let mut disputes = vec![];
-
-        for index in 0..40 {
-            let (amount, mut transaction) = {
-                // Every third transaction is a withdrawl
-                if index % 3 == 0 {
-                    let amount = Amount::new((index + 1) * 400);
-                    (amount, create_withdrawal(&client, amount))
-                } else {
-                    let amount = Amount::new((index + 1) * 500);
-                    (amount, create_deposit(&client, amount))
-                }
-            };
-
-            amounts.push(amount);
-
-            transaction.id = index as TransactionId;
-
-            // Every other deposit is a dispute
-            if index % 2 == 0 {
-                disputes.push(transaction.id);
-            }
-
-            let _res = client.execute_transaction(transaction);
-        }
-
-        // Now create a few disputes
-        let total = client.total();
-        let mut resolves = vec![];
-        for (i, dispute_transaction) in disputes.iter().enumerate() {
-            let dispute = create_dispute(&client, *dispute_transaction);
-            let _res = client.execute_transaction(dispute);
-
-            if i % 2 == 0 {
-                resolves.push(dispute_transaction);
-            }
-        }
-
-        assert_eq!(total, client.total());
-
-        // Now resolve a few
-        for resolve_transaction in resolves {
-            let resolve = create_resolve(&client, *resolve_transaction);
-            let _res = client.execute_transaction(resolve);
-        }
-
-        assert_eq!(total, client.total());
-    }
-
-    #[test]
     fn client_execute_transaction_dispute_deposit_holds_funds_changes_state() {
         let mut client = Client::new(4453);
         let initial = Amount::new(9921);
@@ -380,7 +401,6 @@ mod tests {
         let amount = Amount::new(9921);
         let withdrawal = create_withdrawal(&client, amount);
         client.execute_transaction(withdrawal).unwrap();
-        let total = client.total();
 
         let dispute = create_dispute(&client, withdrawal.id);
         let result = client.execute_transaction(dispute);
@@ -388,8 +408,8 @@ mod tests {
         assert_eq!(true, result.is_ok());
         assert_eq!(TransactionState::Disputed, client.transactions[0].0);
         assert_eq!(amount, client.held);
-        assert_eq!(initial - amount - amount, client.available);
-        assert_eq!(total, client.total());
+        assert_eq!(initial - amount, client.available);
+        assert_eq!(initial, client.total());
     }
 
     #[test]
@@ -455,7 +475,6 @@ mod tests {
         let amount = Amount::new(33);
         let withdrawal = create_withdrawal(&client, amount);
         client.execute_transaction(withdrawal).unwrap();
-        let total = client.total();
 
         let dispute = create_dispute(&client, withdrawal.id);
         let _result = client.execute_transaction(dispute);
@@ -466,8 +485,8 @@ mod tests {
         assert_eq!(true, result.is_ok());
         assert_eq!(TransactionState::Ok, client.transactions[0].0);
         assert_eq!(Amount::zero(), client.held);
-        assert_eq!(total, client.available);
-        assert_eq!(total, client.total());
+        assert_eq!(initial, client.available);
+        assert_eq!(initial, client.total());
     }
 
     #[test]
@@ -617,7 +636,7 @@ mod tests {
         assert_eq!(true, client.locked);
         assert_eq!(TransactionState::Chargebacked, client.transactions[0].0);
         assert_eq!(Amount::zero(), client.held);
-        assert_eq!(total - amount, client.total());
+        assert_eq!(initial - amount, client.total());
     }
 
     #[test]

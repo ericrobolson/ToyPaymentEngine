@@ -18,11 +18,16 @@ This is not heavy duty, as it resides in memory and is not asynchronous.
 
 CSV parsing is handled in `parse_csv.rs`.
 
-A variety of test CSVs are located in the `/test` folder.
+A variety of test CSVs are located in the `/test` folder. A project used for generating CSV files can be found 
+under `/testgen`.
+
+As a bonus, there's a `test-large-files` feature that will generate + allocate `u32` max transactions. I didn't
+ever see it complete, but it can be ran by executing `cargo run --features test-large-files`.
 
 
 ## Next Steps
-* Look at `std` traits and see what can be applied here. Primarily the `std::convert::TryInto` ones.
+* Look at `std` traits and see what can be applied here. Primarily the `std::convert::TryInto` ones
 * Better threading 
 * Better error handling
 * Handling truncation on `Amount`s when converting from a string
+* More testing regarding complex scenarios with transactions

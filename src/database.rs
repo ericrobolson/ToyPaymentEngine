@@ -1,6 +1,6 @@
 use crate::{
     client::{Client, ClientAccount, ClientId},
-    transaction::{Transaction, TransactionError, TransactionType},
+    transaction::{Transaction, TransactionError, TransactionId, TransactionType},
 };
 
 #[derive(PartialEq, Debug)]
@@ -53,10 +53,9 @@ impl Database<Client> {
     pub fn new() -> Self {
         let mut clients = Vec::with_capacity(ClientId::MAX as usize);
 
-        for client_id in 0..ClientId::MAX {
-            clients.push((Client::new(client_id), Status::Invalid));
+        for client_id in 0..ClientId::MAX as usize + 1 {
+            clients.push((Client::new(client_id as ClientId), Status::Invalid));
         }
-
         Self { clients }
     }
 }
@@ -96,5 +95,28 @@ mod tests {
                 .execute_transaction(transaction),
             db_result
         );
+    }
+
+    #[test]
+    fn database_apply_transaction_works_for_max_clients() {
+        let mut db = Database::<Client>::new();
+
+        for client in 0..ClientId::MAX as usize + 1 {
+            let client_id = client as ClientId;
+            let transaction = Transaction {
+                transaction_type: TransactionType::Deposit(Amount::new(342)),
+                client: client_id,
+                id: 23,
+            };
+            let db_result = db.apply_transaction(transaction);
+
+            assert_eq!(Status::Valid, db.clients[client_id as usize].1);
+            assert_eq!(
+                db.clients[client_id as usize]
+                    .0
+                    .execute_transaction(transaction),
+                db_result
+            );
+        }
     }
 }
