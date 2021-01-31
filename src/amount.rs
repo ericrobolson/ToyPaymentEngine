@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use rust_decimal::Decimal;
 
 // Using rust_decimal as it's a finance based decimal crate that allows specification of precision.
@@ -15,6 +17,12 @@ impl Amount {
         Self {
             value: Decimal::new(value, DECIMAL_PLACES),
         }
+    }
+
+    pub fn from_str(s: &str) -> Result<Self, rust_decimal::Error> {
+        let value = Decimal::from_str(s)?;
+
+        Ok(Self { value })
     }
 
     fn base_fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

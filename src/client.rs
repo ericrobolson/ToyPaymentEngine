@@ -5,6 +5,26 @@ use crate::transaction::{
 
 pub type ClientId = u16;
 
+pub trait ClientAccount: Clone {
+    /// The id of the client.
+    fn id(&self) -> ClientId;
+
+    /// The amount of funds the client has available to use.
+    fn available(&self) -> Amount;
+
+    /// The amount of funds held due to disputes.
+    fn held(&self) -> Amount;
+
+    /// Whether the client is frozen or not.
+    fn locked(&self) -> bool;
+
+    /// The total balance on the account.
+    fn total(&self) -> Amount;
+
+    /// Attempts to execute a transaction for the client.
+    fn execute_transaction(&mut self, transaction: Transaction) -> Result<(), TransactionError>;
+}
+
 /// A record that keeps track of a client's account.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Client {
@@ -15,67 +35,34 @@ pub struct Client {
     transactions: Vec<(TransactionState, Transaction)>,
 }
 
-impl Client {
-    /// Creates a new client with the given id.
-    pub fn new(id: ClientId) -> Self {
-        Self {
-            id,
-            available: Amount::zero(),
-            held: Amount::zero(),
-            locked: false,
-            transactions: vec![],
-        }
-    }
-
+impl ClientAccount for Client {
     /// The id of the client.
-    pub fn id(&self) -> ClientId {
+    fn id(&self) -> ClientId {
         self.id
     }
 
     /// The amount of funds the client has available to use.
-    pub fn available(&self) -> Amount {
+    fn available(&self) -> Amount {
         self.available
     }
 
     /// The amount of funds held due to disputes.
-    pub fn held(&self) -> Amount {
+    fn held(&self) -> Amount {
         self.held
     }
 
     /// Whether the client is frozen or not.
-    pub fn locked(&self) -> bool {
+    fn locked(&self) -> bool {
         self.locked
     }
 
     /// The total balance on the account.
-    pub fn total(&self) -> Amount {
+    fn total(&self) -> Amount {
         self.available() + self.held()
     }
 
-    fn transaction_index(&self, transaction_id: TransactionId) -> Option<usize> {
-        for (i, (_, transaction)) in self.transactions.iter().enumerate() {
-            if transaction.id == transaction_id {
-                // Ignore anything that isn't a deposit or withdrawal
-                match transaction.transaction_type {
-                    TransactionType::Deposit(_) => {}
-                    TransactionType::Withdrawal(_) => {}
-                    _ => {
-                        return None;
-                    }
-                }
-
-                return Some(i);
-            }
-        }
-
-        None
-    }
-
     /// Attempts to execute a transaction for the client.
-    pub fn execute_transaction(
-        &mut self,
-        transaction: Transaction,
-    ) -> Result<(), TransactionError> {
+    fn execute_transaction(&mut self, transaction: Transaction) -> Result<(), TransactionError> {
         // Only apply if it matches this client
         if transaction.client != self.id {
             return Err(TransactionError::InvalidClient {
@@ -195,6 +182,38 @@ impl Client {
         self.transactions.push((TransactionState::Ok, transaction));
 
         Ok(())
+    }
+}
+
+impl Client {
+    /// Creates a new client with the given id.
+    pub fn new(id: ClientId) -> Self {
+        Self {
+            id,
+            available: Amount::zero(),
+            held: Amount::zero(),
+            locked: false,
+            transactions: vec![],
+        }
+    }
+
+    fn transaction_index(&self, transaction_id: TransactionId) -> Option<usize> {
+        for (i, (_, transaction)) in self.transactions.iter().enumerate() {
+            if transaction.id == transaction_id {
+                // Ignore anything that isn't a deposit or withdrawal
+                match transaction.transaction_type {
+                    TransactionType::Deposit(_) => {}
+                    TransactionType::Withdrawal(_) => {}
+                    _ => {
+                        return None;
+                    }
+                }
+
+                return Some(i);
+            }
+        }
+
+        None
     }
 }
 

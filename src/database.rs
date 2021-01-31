@@ -1,41 +1,100 @@
 use crate::{
-    client::{Client, ClientId},
-    transaction::Transaction,
+    client::{Client, ClientAccount, ClientId},
+    transaction::{Transaction, TransactionError, TransactionType},
 };
 
-pub struct Database {
-    clients: Vec<Client>,
+#[derive(PartialEq, Debug)]
+enum Status {
+    Valid,
+    Invalid,
 }
 
-impl Database {
-    pub fn new() -> Self {
-        let mut db = Self {
-            clients: Vec::with_capacity(ClientId::MAX as usize),
-        };
+pub struct Database<Account>
+where
+    Account: ClientAccount,
+{
+    clients: Vec<(Account, Status)>,
+}
 
-        // testing
+impl<Account> Database<Account>
+where
+    Account: ClientAccount,
+{
+    pub fn apply_transaction(&mut self, transaction: Transaction) -> Result<(), TransactionError> {
+        let client_index = transaction.client as usize;
 
-        db
+        self.clients[client_index].1 = Status::Valid;
+        self.clients[client_index]
+            .0
+            .execute_transaction(transaction)
     }
 
-    pub fn apply_transaction(&mut self, transaction: Transaction) {}
-
-    pub fn output(&self) -> Vec<String> {
-        //TODO: test this?
-        let mut output = vec![];
+    pub fn output(&self) {
         println!("client, available, held, total, locked");
 
-        self.clients.iter().for_each(|client| {
-            println!(
-                "{:?}, {:?}, {:?}, {:?}, {:?}",
-                client.id(),
-                client.available(),
-                client.held(),
-                client.total(),
-                client.locked()
-            );
-        });
+        self.clients
+            .iter()
+            .filter(|(_account, status)| *status == Status::Valid)
+            .map(|(account, _)| account)
+            .for_each(|client| {
+                println!(
+                    "{:?}, {:?}, {:?}, {:?}, {:?}",
+                    client.id(),
+                    client.available(),
+                    client.held(),
+                    client.total(),
+                    client.locked()
+                );
+            });
+    }
+}
 
-        output
+impl Database<Client> {
+    pub fn new() -> Self {
+        let mut clients = Vec::with_capacity(ClientId::MAX as usize);
+
+        for client_id in 0..ClientId::MAX {
+            clients.push((Client::new(client_id), Status::Invalid));
+        }
+
+        Self { clients }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::amount::Amount;
+
+    #[test]
+    fn database_new_returns_expected() {
+        let db = Database::<Client>::new();
+        for (id, (client, status)) in db.clients.iter().enumerate() {
+            assert_eq!(id as ClientId, client.id());
+            assert_eq!(Status::Invalid, *status);
+        }
+    }
+
+    #[test]
+    fn database_apply_transaction_sets_account_to_valid_returns_result() {
+        // With more time, the ideal would have been to make a mock implementation of the ClientAccount trait and use it for testing.
+
+        let mut db = Database::<Client>::new();
+        let client_id = 45;
+
+        let transaction = Transaction {
+            transaction_type: TransactionType::Deposit(Amount::new(342)),
+            client: client_id,
+            id: 23,
+        };
+        let db_result = db.apply_transaction(transaction);
+
+        assert_eq!(Status::Valid, db.clients[client_id as usize].1);
+        assert_eq!(
+            db.clients[client_id as usize]
+                .0
+                .execute_transaction(transaction),
+            db_result
+        );
     }
 }
