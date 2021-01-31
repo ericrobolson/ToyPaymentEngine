@@ -1,0 +1,16 @@
+[package]
+name = "payments"
+version = "0.1.0"
+authors = ["Eric Olson <eric.rob.olson@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+test-large-files = ["rand"]
+
+[dependencies]
+rust_decimal = "1.10.1"
+serde = {version = "1.0.123", features = ["derive"]}
+csv = "1.1"
+rand = {version=  "0.8.3", optional = true}
