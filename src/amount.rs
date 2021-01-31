@@ -158,4 +158,14 @@ mod tests {
 
         assert_eq!(expected, actual);
     }
+
+    #[test]
+    fn amount_from_str_deserializes_properly() {
+        todo!()
+    }
+
+    #[test]
+    fn amount_from_str_exceeds_decimal_places() {
+        todo!()
+    }
 }
